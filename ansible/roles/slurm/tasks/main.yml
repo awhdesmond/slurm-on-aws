@@ -1,0 +1,41 @@
+---
+- block:
+    - name: Install nfs-client
+      become: true
+      apt:
+        update_cache: yes
+        name: nfs-common
+        state: present
+    - name: Create shared directory
+      become: true
+      file:
+        path: /shared
+        mode: '777'
+        state: directory
+        owner: nobody
+        group: nogroup
+    - name: mount NFS share
+      become: true
+      mount:
+        src: filesystem0:/shared
+        path: /shared
+        fstype: nfs
+        state: mounted
+
+- name: Install controller
+  include_tasks:
+    file: install_controller.yml
+  when:
+  - component == 'controller'
+
+- name: Install compute
+  include_tasks:
+    file: install_compute.yml
+  when:
+  - component == 'compute'
+
+- name: Install login
+  include_tasks:
+    file: install_compute.yml
+  when:
+  - component == 'login'

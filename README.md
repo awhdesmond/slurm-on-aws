@@ -1,9 +1,34 @@
 # slurm-on-aws
 
-IaC repositoiry for provisioning SLURM cluster on AWS EC2 with GlusterFS parallel file system.
+IaC repositoiry for provisioning SLURM cluster on AWS EC2 with NFS.
 
-## Pre-requisite
+![architecture](docs/slurm-architecture.png "Title")
+
+## Provision with Terraform
 
 1. Install `aws` CLI
 2. Create an AWS user for `terraform` with `AdministratorAccess` permission
+3. Run terraform
 
+```bash
+terraform init
+terraform apply
+```
+
+## Ansible
+
+```bash
+# Update /etc/hosts
+ansible-playbook -i inventory.ini play-hostnames.yml
+
+# Install NFS
+ansible-playbook -i inventory.ini play-install-nfs.yml
+
+# Install SLURM
+ansible-playbook -i inventory.ini play-install-slurm.yml
+```
+
+## To Do:
+
+- [ ] Switch from NFS to GlusterFS
+- [ ] HA Controller with backup node

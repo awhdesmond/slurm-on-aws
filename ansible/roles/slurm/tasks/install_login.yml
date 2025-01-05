@@ -1,0 +1,31 @@
+---
+- name: Install apt package
+  become: true
+  apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  with_items:
+  - slurmd
+  - slurm-client
+
+- name: Copy SLURM Configuration
+  become: true
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.destination }}"
+    owner: ubuntu
+    group: ubuntu
+    mode: '640'
+  with_items:
+  - src: slurm.conf.j2
+    destination: /etc/slurm/slurm.conf
+
+- name: Copy MUNGE Key from shared directory
+  become: true
+  copy:
+    src: /shared/munge.key
+    dest: /etc/munge/munge.key
+    remote_src: true
+    owner: munge
+    group: munge

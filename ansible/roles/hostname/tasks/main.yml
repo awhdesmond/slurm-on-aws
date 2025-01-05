@@ -1,0 +1,14 @@
+---
+- name: Add IP address of all hosts to all hosts
+  become: true
+  lineinfile:
+    dest: /etc/hosts
+    regexp: '.*{{ item }}$'
+    line: "{{ hostvars[item].ansible_host }} {{item}}"
+    state: present
+  when: hostvars[item].ansible_host is defined
+  with_items: "{{ groups.all }}"
+
+# - name: Reboot machine
+#   ansible.builtin.reboot:
+#     reboot_timeout: 3600
