@@ -1,0 +1,40 @@
+---
+- name: Install apt package
+  become: true
+  apt:
+    name: slurm-wlm
+    state: present
+    update_cache: yes
+
+- name: Configure SLURM
+  become: true
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.destination }}"
+    owner: ubuntu
+    group: ubuntu
+    mode: '640'
+  with_items:
+  - src: slurm.conf.j2
+    destination: /etc/slurm/slurm.conf
+  - src: cgroup.conf.j2
+    destination: /etc/slurm/cgroup.conf
+  - src: cgroup_allowed_devices_file.conf.j2
+    destination: /etc/slurm/cgroup_allowed_devices_file.conf
+
+- name: Copy MUNGE Key to shared directory
+  become: true
+  copy:
+    src: /etc/munge/munge.key
+    dest: /shared/munge.key
+    remote_src: true
+
+- name: Enable systemd services
+  become: true
+  systemd_service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: true
+  with_items:
+  - munge
+  - slurmctld

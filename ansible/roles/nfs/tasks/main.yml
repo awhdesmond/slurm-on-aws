@@ -1,0 +1,36 @@
+---
+- name: Install NFS
+  become: true
+  apt:
+    update_cache: yes
+    name: nfs-kernel-server
+    state: present
+
+- name: Create mount directory
+  become: true
+  file:
+    path: /shared
+    mode: '777'
+    state: directory
+    owner: nobody
+    group: nogroup
+
+- name: Configure exports
+  become: true
+  lineinfile:
+    path: /etc/exports
+    state: present
+    line: "{{ item }}"
+  with_items:
+  - "/shared 10.0.0.0/8(rw,sync,no_root_squash,no_subtree_check,insecure)"
+
+- name: Restart NFS Service
+  become: true
+  systemd_service:
+    daemon_reload: yes
+    state: restarted
+    name: nfs-kernel-server
+
+- name: Export share
+  become: true
+  command: exportfs -a

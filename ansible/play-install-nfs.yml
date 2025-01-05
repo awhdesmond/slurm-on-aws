@@ -1,0 +1,7 @@
+---
+- name: Update hostnames of nodes
+  hosts: nfs
+  gather_facts: false
+  tasks:
+  - import_role:
+      name: nfs
