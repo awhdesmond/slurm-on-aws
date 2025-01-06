@@ -24,11 +24,20 @@ ansible-playbook -i inventory.ini play-hostnames.yml
 # Install NFS
 ansible-playbook -i inventory.ini play-install-nfs.yml
 
+# Install Gluster
+ansible-playbook -i inventory.ini play-install-gluster.yml
+
+sudo gluster volume create gv0 replica 3 \
+    gluster0:/export/xvdh1/brick \
+    gluster1:/export/xvdh1/brick \
+    gluster2:/export/xvdh1/brick
+
+sudo gluster volume start gv0
+sudo gluster volume status
+sudo gluster volume info gv0
+
 # Install SLURM
 ansible-playbook -i inventory.ini play-install-slurm.yml
 ```
 
-## To Do:
-
-- [ ] Switch from NFS to GlusterFS
-- [ ] HA Controller with backup node
+## To Do

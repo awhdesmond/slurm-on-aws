@@ -1,5 +1,5 @@
 ---
-- name: Update hostnames of nodes
+- name: Install NFS
   hosts: nfs
   gather_facts: false
   tasks:

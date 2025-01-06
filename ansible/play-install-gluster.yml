@@ -1,0 +1,7 @@
+---
+- name: Install GlusterFS
+  hosts: gluster
+  gather_facts: false
+  tasks:
+  - import_role:
+      name: glusterfs

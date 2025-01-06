@@ -4,6 +4,7 @@
 #
 ClusterName=cluster
 SlurmctldHost=controller0
+SlurmctldHost=controller1
 #
 #DisableRootJobs=NO
 #EnforcePartLimits=NO
@@ -11,7 +12,7 @@ SlurmctldHost=controller0
 #EpilogSlurmctld=
 #FirstJobId=1
 #MaxJobId=67043328
-#GresTypes=
+GresTypes=gpu
 #GroupUpdateForce=0
 #GroupUpdateTime=600
 #JobFileAppend=0
@@ -86,6 +87,7 @@ Waittime=0
 #SchedulerTimeSlice=30
 SchedulerType=sched/backfill
 SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
 #
 #
 # JOB PRIORITY

@@ -1,7 +1,7 @@
 ---
-- name: Update hostnames of nodes
+- name: Update /etc/hosts of nodes
   hosts: all
   gather_facts: false
   tasks:
   - import_role:
-      name: hostname
+      name: hosts_names

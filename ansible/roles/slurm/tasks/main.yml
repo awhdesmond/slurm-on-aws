@@ -1,32 +1,53 @@
 ---
 - block:
-    - name: Install nfs-client
+    - name: Install storage client
       become: true
       apt:
         update_cache: yes
-        name: nfs-common
+        name: "{{ item }}"
         state: present
-    - name: Create shared directory
+      with_items:
+      - nfs-common
+      - glusterfs-client
+
+    - name: Create shared directories
       become: true
       file:
-        path: /shared
+        path: "{{ item }}"
         mode: '777'
         state: directory
         owner: nobody
         group: nogroup
-    - name: mount NFS share
+      with_items:
+      - /shared
+      - /shared_gluster
+
+    - name: mount storage
       become: true
       mount:
-        src: filesystem0:/shared
+        src: "{{ item.src }}"
+        path: "{{ item.path }}"
+        fstype: "{{ item.fstype }}"
+        state: mounted
+      with_items:
+      - src: nfs0:/shared
         path: /shared
         fstype: nfs
-        state: mounted
+      - src: gluster0:/gv0
+        path: /shared_gluster
+        fstype: glusterfs
 
 - name: Install controller
   include_tasks:
     file: install_controller.yml
   when:
   - component == 'controller'
+
+- name: Install controller backup
+  include_tasks:
+    file: install_controller_backup.yml
+  when:
+  - component == 'controller-backup'
 
 - name: Install compute
   include_tasks:
@@ -36,6 +57,6 @@
 
 - name: Install login
   include_tasks:
-    file: install_compute.yml
+    file: install_login.yml
   when:
   - component == 'login'
