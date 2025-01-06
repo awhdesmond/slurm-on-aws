@@ -121,3 +121,50 @@ resource "aws_instance" "compute" {
     Name = "compute${count.index}"
   }
 }
+
+
+# GPU Nodes
+
+resource "aws_network_interface" "gpu_compute" {
+  count = local.num_gpu_nodes
+
+  subnet_id = aws_subnet.compute.id
+  private_ips = [
+    cidrhost(
+      local.compute_subnet_cidr,
+      count.index + local.num_controller_nodes + local.num_compute_nodes + 4
+    )
+  ]
+
+  security_groups = [ aws_security_group.compute_all_to_all.id ]
+
+  tags = {
+    Name = "gpu-compute${count.index}"
+  }
+}
+
+resource "aws_instance" "gpu_compute" {
+  count = local.num_gpu_nodes
+
+  ami = data.aws_ami.ubuntu.id
+  instance_type = "g5.xlarge"
+  availability_zone = local.cluster_subnet_az
+
+  key_name = aws_key_pair.deployer.key_name
+
+  network_interface {
+    network_interface_id = aws_network_interface.gpu_compute[count.index].id
+    device_index = 0
+  }
+
+  root_block_device {
+    volume_type           = "gp2"
+    volume_size           = "20"
+    delete_on_termination = true
+  }
+
+  tags = {
+    Name = "gpu-compute${count.index}"
+  }
+}
+

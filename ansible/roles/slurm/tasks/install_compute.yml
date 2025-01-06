@@ -20,6 +20,8 @@
   with_items:
   - src: slurm.conf.j2
     destination: /etc/slurm-llnl/slurm.conf
+  - src: gres.conf.j2
+    destination: /etc/slurm-llnl/gres.conf
   - src: cgroup.conf.j2
     destination: /etc/slurm-llnl/cgroup.conf
   - src: cgroup_allowed_devices_file.conf.j2

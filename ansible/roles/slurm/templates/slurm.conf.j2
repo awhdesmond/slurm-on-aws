@@ -12,7 +12,6 @@ SlurmctldHost=controller1
 #EpilogSlurmctld=
 #FirstJobId=1
 #MaxJobId=67043328
-GresTypes=gpu
 #GroupUpdateForce=0
 #GroupUpdateTime=600
 #JobFileAppend=0
@@ -145,5 +144,10 @@ SlurmdLogFile=/var/log/slurmd.log
 #
 #
 # COMPUTE NODES
+GresTypes=gpu
+
 NodeName=compute[0-2] CPUs=1 State=UNKNOWN
-PartitionName=debug Nodes=ALL Default=YES MaxTime=INFINITE State=UP
+PartitionName=debug Nodes=compute[0-2] Default=YES MaxTime=INFINITE State=UP
+
+NodeName=gpu-compute[0-1] Gres=gpu:8 CPUs=4 State=UNKNOWN
+PartitionName=gpu Nodes=gpu-compute[0-1] MaxTime=INFINITE State=UP
