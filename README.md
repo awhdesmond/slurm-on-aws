@@ -41,3 +41,5 @@ ansible-playbook -i inventory.ini play-install-slurm.yml
 ```
 
 ## To Do
+
+- [ ]  Add GPU partition
