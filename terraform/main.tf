@@ -10,6 +10,7 @@ locals {
   num_login_nodes = 1
   num_controller_nodes = 2
   num_compute_nodes = 3
+  num_gpu_nodes = 2
   num_nfs_nodes = 1
   num_filesystem_nodes = 3
 }
