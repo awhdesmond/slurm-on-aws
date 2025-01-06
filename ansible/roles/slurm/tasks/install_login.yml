@@ -19,7 +19,7 @@
     mode: '640'
   with_items:
   - src: slurm.conf.j2
-    destination: /etc/slurm/slurm.conf
+    destination: /etc/slurm-llnl/slurm.conf
 
 - name: Copy MUNGE Key from shared directory
   become: true
@@ -29,3 +29,4 @@
     remote_src: true
     owner: munge
     group: munge
+    mode: '600'

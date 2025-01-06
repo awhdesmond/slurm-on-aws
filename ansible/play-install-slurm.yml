@@ -1,21 +1,30 @@
 ---
-# - name: Install SLURM controller
-#   hosts: controller
-#   gather_facts: false
-#   vars:
-#     component: controller
-#   tasks:
-#   - include_role:
-#       name: slurm
+- name: Install SLURM controller
+  hosts: controller
+  gather_facts: false
+  vars:
+    component: controller
+  tasks:
+  - include_role:
+      name: slurm
 
-# - name: Install SLURM compute
-#   hosts: compute
-#   gather_facts: false
-#   vars:
-#     component: compute
-#   tasks:
-#   - include_role:
-#       name: slurm
+- name: Install SLURM controller backup
+  hosts: controller-backup
+  gather_facts: false
+  vars:
+    component: controller-backup
+  tasks:
+  - include_role:
+      name: slurm
+
+- name: Install SLURM compute
+  hosts: compute
+  gather_facts: false
+  vars:
+    component: compute
+  tasks:
+  - include_role:
+      name: slurm
 
 - name: Install SLURM login
   hosts: login

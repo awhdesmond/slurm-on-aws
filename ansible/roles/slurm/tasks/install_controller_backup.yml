@@ -22,19 +22,15 @@
   - src: cgroup_allowed_devices_file.conf.j2
     destination: /etc/slurm-llnl/cgroup_allowed_devices_file.conf
 
-- name: Create SaveStateLocation
-  file:
-    path: /shared/slurmctld
-    state: directory
-    owner: ubuntu
-    group: ubuntu
-
-- name: Copy MUNGE Key to shared directory
+- name: Copy MUNGE Key from shared directory
   become: true
   copy:
-    src: /etc/munge/munge.key
-    dest: /shared/munge.key
+    src: /shared/munge.key
+    dest: /etc/munge/munge.key
     remote_src: true
+    owner: munge
+    group: munge
+    mode: '600'
 
 - name: Enable systemd services
   become: true

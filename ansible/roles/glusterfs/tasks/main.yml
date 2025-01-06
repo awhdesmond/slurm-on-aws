@@ -1,0 +1,69 @@
+---
+- name: Install software-properties-common
+  become: true
+  apt:
+    update_cache: yes
+    name: software-properties-common
+    state: present
+
+- name: Install glusterfs-server
+  become: true
+  apt:
+    update_cache: yes
+    name: glusterfs-server
+    state: present
+
+- name: Enable systemd services
+  become: true
+  systemd_service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: true
+    daemon_reload: true
+  with_items:
+  - glusterd
+
+- name: Partition the disk
+  become: true
+  parted:
+    device: /dev/xvdh
+    number: 1
+    flags: [ lvm ]
+    state: present
+
+- name: Format the partition
+  become: true
+  filesystem:
+    fstype: xfs
+    dev: /dev/xvdh1
+
+- name: Create mount directory
+  become: true
+  become: true
+  file:
+    path: /export/xvdh1
+    state: directory
+
+- name: Configure exports
+  become: true
+  lineinfile:
+    path: /etc/fstab
+    state: present
+    line: "{{ item }}"
+  with_items:
+  - "/dev/xvdh1 /export/xvdh1 xfs defaults 0 0"
+
+- name: Mount partition as Gluster brick
+  become: true
+  mount:
+    fstype: xfs
+    src: /dev/xvdh1
+    path: /export/xvdh1
+    state: mounted
+
+- name: Peer probe
+  become: true
+  command: "gluster peer probe {{ item }}"
+  with_items: "{{ groups.gluster }}"
+  when:
+  - inventory_hostname != item
