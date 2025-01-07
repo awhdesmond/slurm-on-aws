@@ -1,0 +1,7 @@
+---
+- name: Install NVIDIA Drivers
+  hosts: gpu-compute
+  gather_facts: false
+  tasks:
+  - include_role:
+      name: nvidia_drivers

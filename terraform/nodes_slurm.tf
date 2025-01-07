@@ -147,7 +147,7 @@ resource "aws_instance" "gpu_compute" {
   count = local.num_gpu_nodes
 
   ami = data.aws_ami.ubuntu.id
-  instance_type = "g5.xlarge"
+  instance_type = "g6.xlarge"
   availability_zone = local.cluster_subnet_az
 
   key_name = aws_key_pair.deployer.key_name

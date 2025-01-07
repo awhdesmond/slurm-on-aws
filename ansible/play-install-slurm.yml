@@ -18,7 +18,9 @@
       name: slurm
 
 - name: Install SLURM compute
-  hosts: compute
+  hosts:
+  - compute
+  - gpu_compute
   gather_facts: false
   vars:
     component: compute

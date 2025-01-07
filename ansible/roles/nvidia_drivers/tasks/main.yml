@@ -1,0 +1,14 @@
+- name: Install nvidia drivers
+  become: true
+  apt:
+    update_cache: yes
+    name: "{{ item }}"
+    state: present
+  with_items:
+  - nvidia-driver-510
+  - nvidia-dkms-510
+
+- name: Reboot servers
+  become: true
+  ansible.builtin.reboot:
+    reboot_timeout: 3600

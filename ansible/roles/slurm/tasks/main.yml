@@ -1,41 +1,7 @@
 ---
-- block:
-    - name: Install storage client
-      become: true
-      apt:
-        update_cache: yes
-        name: "{{ item }}"
-        state: present
-      with_items:
-      - nfs-common
-      - glusterfs-client
-
-    - name: Create shared directories
-      become: true
-      file:
-        path: "{{ item }}"
-        mode: '777'
-        state: directory
-        owner: nobody
-        group: nogroup
-      with_items:
-      - /shared
-      - /shared_gluster
-
-    - name: mount storage
-      become: true
-      mount:
-        src: "{{ item.src }}"
-        path: "{{ item.path }}"
-        fstype: "{{ item.fstype }}"
-        state: mounted
-      with_items:
-      - src: nfs0:/shared
-        path: /shared
-        fstype: nfs
-      - src: gluster0:/gv0
-        path: /shared_gluster
-        fstype: glusterfs
+- name: Initialise storage
+  include_tasks:
+    file: storage.yml
 
 - name: Install controller
   include_tasks:
