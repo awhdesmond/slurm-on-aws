@@ -1,6 +1,6 @@
 # slurm-on-aws
 
-IaC repositoiry for provisioning SLURM cluster on AWS EC2 with NFS.
+IaC repositoiry for provisioning SLURM cluster on AWS EC2 
 
 ![architecture](docs/slurm-architecture.png "Title")
 
