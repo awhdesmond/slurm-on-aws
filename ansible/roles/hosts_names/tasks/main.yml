@@ -1,5 +1,5 @@
 ---
-- name: Add IP address of all hosts to all hosts
+- name: Add IP addresses of all hosts to all other hosts
   become: true
   lineinfile:
     dest: /etc/hosts

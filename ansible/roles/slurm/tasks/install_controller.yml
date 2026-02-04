@@ -24,6 +24,7 @@
   - src: cgroup_allowed_devices_file.conf.j2
     destination: /etc/slurm-llnl/cgroup_allowed_devices_file.conf
 
+
 - name: Create SaveStateLocation
   file:
     path: /shared/slurmctld
