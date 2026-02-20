@@ -1,33 +1,63 @@
 # slurm-on-aws
 
-IaC repository for provisioning a small SLURM cluster on AWS EC2 instances.
+IaC repository for provisioning a SLURM cluster on AWS EC2 instances.
 
-* 1 login node to access the SLURM cluster
-* 1 Main SLURM controller node and 1 backup SLURM controller node.
-* 3 CPU compute nodes
-* 2 GPU compute nodes
-* 1 NFS node
-* 3 GlusterFS nodes
+## Cluster Architecture
 
-![architecture](docs/slurm-architecture.png "Title")
+| Node Role | Count | Instance Type | Notes |
+|---|---|---|---|
+| Login | 1 | `t2.small` | Public subnet, SSH access |
+| Controller | 2 | `t2.small` | 1 primary + 1 backup, lifecycle-protected |
+| CPU Compute | 3 | `t2.small` | Cluster placement group |
+| GPU Compute | 2 | `p4d.24xlarge` | 8× A100 GPUs, EFA networking, cluster placement group |
+| NFS | 1 | `t2.small` | Shared storage, lifecycle-protected |
+| GlusterFS | 3 | `t2.small` | Parallel filesystem with 20 GB EBS each |
+| Database | 1 | `db.t3.micro` | RDS MySQL 8.0 for SLURM accounting (module) |
+
+![architecture](docs/slurm-architecture.png)
+
+### Infrastructure Highlights
+
+- **OS**: Ubuntu 24.04 LTS (Noble) on all nodes
+- **EBS**: gp3 volumes throughout (better IOPS at lower cost)
+- **Networking**: Cluster placement group for compute nodes, EFA-enabled ENIs for GPU nodes (400 Gbps)
+- **Security**: IMDSv2 enforced, SSH restricted to login nodes, all-protocol intra-cluster SG
+- **Database**: RDS MySQL 8.0 with gp3 encrypted storage, automated backups, and autoscaling
+- **Tagging**: Consistent `Project`, `Environment`, `ManagedBy` tags on all resources
 
 ## Provision with Terraform
 
-We can provision the base cloud resources using Terraform:
+### Prerequisites
 
-1. Install `aws` CLI
-2. Create an AWS user for `terraform` with `AdministratorAccess` permission
-3. Run terraform
+1. Install the `aws` CLI
+2. Create an AWS user/profile named `terraform` with `AdministratorAccess`
+3. Ensure your service quota covers `p4d.24xlarge` instances (On-Demand P Instances)
+
+### Deploy
 
 ```bash
+cd terraform
+
+# Copy and customise variables
+cp terraform.tfvars.example terraform.tfvars
+
 terraform init
+terraform plan    # Review the changeset
 terraform apply
+```
+
+Useful outputs after apply:
+
+```bash
+terraform output login_public_ips
+terraform output controller_private_ips
+terraform output compute_private_ips
+terraform output gpu_compute_private_ips
 ```
 
 ## Ansible
 
-Next, we need to configure the provisioned hosts and install the necessary SLURM & Filesystem components.
-
+Configure the provisioned hosts and install SLURM & filesystem components:
 
 ```bash
 export LOGIN_NODE_IP=<login-node-ip>
@@ -57,7 +87,7 @@ ansible-playbook -i inventory.ini play-install-nvidia-drivers.yml
 ansible-playbook -i inventory.ini play-install-slurm.yml
 ```
 
-## Submit a SLURM job
+## Submit a SLURM Job
 
 ```bash
 # Login to the login node
@@ -68,7 +98,7 @@ sbatch scripts/sample.slurm
 sbatch scripts/gpu-sample.slurm
 ```
 
-# TODO
+## TODO
 
-1. Provision `slurmdbd` for accounting.
-
+1. Add CloudWatch alarms for GPU nodes.
+2. Configure S3 + DynamoDB backend for remote Terraform state.

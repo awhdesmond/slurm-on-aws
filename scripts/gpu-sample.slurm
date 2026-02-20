@@ -11,6 +11,9 @@
 
 echo "Job running on nodes: $SLURM_JOB_NODELIST"
 
+# Create a directory for the job outputs
+mkdir -p /shared_gluster/gpu-sample
+
 # Run nvidia-smi
 # This should print output from BOTH nodes
 srun --label nvidia-smi

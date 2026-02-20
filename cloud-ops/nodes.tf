@@ -1,3 +1,20 @@
+locals {
+  num_login_nodes      = 1
+  num_controller_nodes = 2
+  num_compute_nodes    = 3
+  num_gpu_nodes        = 2
+  num_nfs_nodes        = 1
+  num_filesystem_nodes = 3
+
+  # Instance types per node role
+  login_instance_type      = "t2.small"
+  controller_instance_type = "t2.small"
+  compute_instance_type    = "t2.small"
+  gpu_instance_type        = "p4d.24xlarge"
+  nfs_instance_type        = "t2.small"
+  filesystem_instance_type = "t2.small"
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 # Nodes AMI
 # ---------------------------------------------------------------------------------------------------------------------
@@ -7,7 +24,7 @@ data "aws_ami" "ubuntu" {
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
   }
 
   filter {
@@ -24,25 +41,65 @@ data "aws_ami" "ubuntu" {
 
 resource "aws_key_pair" "deployer" {
   key_name   = "deployer"
-  public_key = file("~/.ssh/id_ed25519.pub")
+  public_key = file(var.ssh_public_key_path)
+
+  tags = local.common_tags
 }
 
+# ---------------------------------------------------------------------------------------------------------------------
+# 1. Shared Security Group — Compute All-to-All
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_security_group" "compute_all_to_all" {
+  name        = "compute_all_to_all"
+  description = "Allow all compute nodes to communicate with each other"
+  vpc_id      = aws_vpc.main.id
+
+  tags = merge(local.common_tags, {
+    Name = "compute-all-to-all"
+  })
+}
+
+resource "aws_vpc_security_group_ingress_rule" "compute_all_to_all_allow_all" {
+  security_group_id            = aws_security_group.compute_all_to_all.id
+  referenced_security_group_id = aws_security_group.compute_all_to_all.id
+
+  ip_protocol = "-1" # All protocols (TCP, UDP, ICMP) — required for Slurm/MPI
+}
+
+resource "aws_vpc_security_group_egress_rule" "compute_all_to_all_allow_all" {
+  security_group_id = aws_security_group.compute_all_to_all.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1" # All protocols
+}
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 1. Login Nodes
+# 2. Login Nodes
 # ---------------------------------------------------------------------------------------------------------------------
+
 resource "aws_security_group" "login" {
   name        = "login"
   description = "Allow SSH to login nodes"
   vpc_id      = aws_vpc.main.id
+
+  tags = merge(local.common_tags, {
+    Name = "login"
+  })
 }
 
+# NOTE: Restrict cidr_ipv4 to your known IP ranges in production.
 resource "aws_vpc_security_group_ingress_rule" "login_all_ssh" {
   security_group_id = aws_security_group.login.id
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "tcp"
   from_port         = 22
   to_port           = 22
+}
+
+resource "aws_vpc_security_group_egress_rule" "login_allow_all_egress" {
+  security_group_id = aws_security_group.login.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
 }
 
 resource "aws_network_interface" "login" {
@@ -53,38 +110,44 @@ resource "aws_network_interface" "login" {
     aws_security_group.login.id,
     aws_security_group.compute_all_to_all.id
   ]
-  tags = {
+
+  tags = merge(local.common_tags, {
     Name = "login${count.index}"
-  }
+  })
 }
 
 resource "aws_instance" "login" {
   count = local.num_login_nodes
 
   ami               = data.aws_ami.ubuntu.id
-  instance_type     = "t2.small"
+  instance_type     = local.login_instance_type
   availability_zone = var.availability_zone
 
-  primary_network_interface {
+  network_interface {
     network_interface_id = aws_network_interface.login[count.index].id
+    device_index         = 0
   }
 
   root_block_device {
-    volume_type           = "gp2"
-    volume_size           = "10"
+    volume_type           = "gp3"
+    volume_size           = 10
     delete_on_termination = true
+  }
+
+  metadata_options {
+    http_tokens   = "required" # Enforce IMDSv2
+    http_endpoint = "enabled"
   }
 
   key_name = aws_key_pair.deployer.key_name
 
-  tags = {
+  tags = merge(local.common_tags, {
     Name = "login${count.index}"
-  }
+  })
 }
 
-
 # ---------------------------------------------------------------------------------------------------------------------
-# 2. Controller Nodes
+# 3. Controller Nodes
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_network_interface" "controller" {
@@ -96,63 +159,62 @@ resource "aws_network_interface" "controller" {
   ]
 
   security_groups = [aws_security_group.compute_all_to_all.id]
-  tags = {
+
+  tags = merge(local.common_tags, {
     Name = "controller${count.index}"
-  }
+  })
 }
 
 resource "aws_instance" "controller" {
   count = local.num_controller_nodes
 
   ami               = data.aws_ami.ubuntu.id
-  instance_type     = "t2.small"
+  instance_type     = local.controller_instance_type
   availability_zone = var.availability_zone
 
   key_name = aws_key_pair.deployer.key_name
 
-  primary_network_interface {
+  network_interface {
     network_interface_id = aws_network_interface.controller[count.index].id
+    device_index         = 0
   }
 
   root_block_device {
-    volume_type           = "gp2"
-    volume_size           = "8"
+    volume_type           = "gp3"
+    volume_size           = 8
     delete_on_termination = true
   }
 
-  tags = {
-    Name = "controller${count.index}"
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "controller${count.index}"
+  })
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 3. CPU Compute Nodes
+# 4. Cluster Placement Group (shared by compute + GPU nodes)
 # ---------------------------------------------------------------------------------------------------------------------
-resource "aws_security_group" "compute_all_to_all" {
-  name        = "compute_all_to_all"
-  description = "Allow all compute nodes to communicate with each other"
-  vpc_id      = aws_vpc.main.id
+
+resource "aws_placement_group" "compute_cluster" {
+  name     = "slurm-compute-cluster"
+  strategy = "cluster"
+
+  tags = merge(local.common_tags, {
+    Name = "slurm-compute-cluster"
+  })
 }
 
-resource "aws_vpc_security_group_ingress_rule" "compute_all_to_all_allow_all" {
-  security_group_id            = aws_security_group.compute_all_to_all.id
-  referenced_security_group_id = aws_security_group.compute_all_to_all.id
-
-  ip_protocol = "tcp"
-  from_port   = 0
-  to_port     = 65535
-}
-
-
-resource "aws_vpc_security_group_egress_rule" "compute_all_to_all_allow_all" {
-  security_group_id = aws_security_group.compute_all_to_all.id
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "tcp"
-  from_port         = 0
-  to_port           = 65535
-}
-
-
+# ---------------------------------------------------------------------------------------------------------------------
+# 5. CPU Compute Nodes
+# ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_network_interface" "compute" {
   count = local.num_compute_nodes
@@ -164,39 +226,67 @@ resource "aws_network_interface" "compute" {
 
   security_groups = [aws_security_group.compute_all_to_all.id]
 
-  tags = {
+  tags = merge(local.common_tags, {
     Name = "compute${count.index}"
-  }
+  })
 }
 
 resource "aws_instance" "compute" {
   count = local.num_compute_nodes
 
   ami               = data.aws_ami.ubuntu.id
-  instance_type     = "t2.small"
+  instance_type     = local.compute_instance_type
   availability_zone = var.availability_zone
+  placement_group   = aws_placement_group.compute_cluster.id
 
   key_name = aws_key_pair.deployer.key_name
 
-  primary_network_interface {
+  network_interface {
     network_interface_id = aws_network_interface.compute[count.index].id
+    device_index         = 0
   }
 
   root_block_device {
-    volume_type           = "gp2"
-    volume_size           = "10"
+    volume_type           = "gp3"
+    volume_size           = 10
     delete_on_termination = true
   }
 
-  tags = {
-    Name = "compute${count.index}"
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
   }
+
+  tags = merge(local.common_tags, {
+    Name = "compute${count.index}"
+  })
 }
 
+# ---------------------------------------------------------------------------------------------------------------------
+# 6. GPU Compute Nodes (with EFA)
+# ---------------------------------------------------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------------------------------------------------
-# 4. GPU Compute Nodes
-# ---------------------------------------------------------------------------------------------------------------------
+resource "aws_security_group" "efa" {
+  name        = "efa"
+  description = "Allow all traffic for EFA communication between GPU nodes"
+  vpc_id      = aws_vpc.main.id
+
+  tags = merge(local.common_tags, {
+    Name = "efa"
+  })
+}
+
+resource "aws_vpc_security_group_ingress_rule" "efa_allow_all" {
+  security_group_id            = aws_security_group.efa.id
+  referenced_security_group_id = aws_security_group.efa.id
+  ip_protocol                  = "-1"
+}
+
+resource "aws_vpc_security_group_egress_rule" "efa_allow_all" {
+  security_group_id            = aws_security_group.efa.id
+  referenced_security_group_id = aws_security_group.efa.id
+  ip_protocol                  = "-1"
+}
 
 resource "aws_network_interface" "gpu_compute" {
   count = local.num_gpu_nodes
@@ -209,81 +299,108 @@ resource "aws_network_interface" "gpu_compute" {
     )
   ]
 
-  security_groups = [aws_security_group.compute_all_to_all.id]
+  interface_type = "efa"
 
-  tags = {
+  security_groups = [
+    aws_security_group.compute_all_to_all.id,
+    aws_security_group.efa.id
+  ]
+
+  tags = merge(local.common_tags, {
     Name = "gpu-compute${count.index}"
-  }
+  })
 }
 
 resource "aws_instance" "gpu_compute" {
   count = local.num_gpu_nodes
 
   ami               = data.aws_ami.ubuntu.id
-  instance_type     = "g6.xlarge"
+  instance_type     = local.gpu_instance_type
   availability_zone = var.availability_zone
+  placement_group   = aws_placement_group.compute_cluster.id
 
   key_name = aws_key_pair.deployer.key_name
 
-  primary_network_interface {
+  network_interface {
     network_interface_id = aws_network_interface.gpu_compute[count.index].id
+    device_index         = 0
   }
 
   root_block_device {
-    volume_type           = "gp2"
-    volume_size           = "20"
+    volume_type           = "gp3"
+    volume_size           = 20
     delete_on_termination = true
   }
 
-  tags = {
-    Name = "gpu-compute${count.index}"
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
   }
+
+  tags = merge(local.common_tags, {
+    Name = "gpu-compute${count.index}"
+  })
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 5. NFS nodes
+# 7. NFS Nodes
 # ---------------------------------------------------------------------------------------------------------------------
+
 resource "aws_network_interface" "nfs" {
   count = local.num_nfs_nodes
 
   subnet_id = aws_subnet.compute.id
   private_ips = [
-    cidrhost(local.compute_subnet_cidr, (-count.index - 4))
+    cidrhost(
+      local.compute_subnet_cidr,
+      count.index + local.num_controller_nodes + local.num_compute_nodes + local.num_gpu_nodes + 4
+    )
   ]
 
   security_groups = [aws_security_group.compute_all_to_all.id]
 
-  tags = {
+  tags = merge(local.common_tags, {
     Name = "nfs${count.index}"
-  }
+  })
 }
 
 resource "aws_instance" "nfs" {
   count = local.num_nfs_nodes
 
   ami               = data.aws_ami.ubuntu.id
-  instance_type     = "t2.small"
+  instance_type     = local.nfs_instance_type
   availability_zone = var.availability_zone
+  ebs_optimized     = true
 
   key_name = aws_key_pair.deployer.key_name
 
-  primary_network_interface {
+  network_interface {
     network_interface_id = aws_network_interface.nfs[count.index].id
+    device_index         = 0
   }
 
   root_block_device {
-    volume_type           = "gp2"
-    volume_size           = "10"
+    volume_type           = "gp3"
+    volume_size           = 10
     delete_on_termination = true
   }
 
-  tags = {
-    Name = "nfs${count.index}"
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "nfs${count.index}"
+  })
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 5. Parallel Filesystem nodes
+# 8. Parallel Filesystem Nodes
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_ebs_volume" "filesystem" {
@@ -291,11 +408,11 @@ resource "aws_ebs_volume" "filesystem" {
 
   availability_zone = var.availability_zone
   size              = 20
-  type              = "gp2"
+  type              = "gp3"
 
-  tags = {
+  tags = merge(local.common_tags, {
     Name = "filesystem${count.index}"
-  }
+  })
 }
 
 resource "aws_volume_attachment" "filesystem_attach" {
@@ -311,36 +428,46 @@ resource "aws_network_interface" "filesystem" {
 
   subnet_id = aws_subnet.compute.id
   private_ips = [
-    cidrhost(local.compute_subnet_cidr, (-count.index - 4 - local.num_nfs_nodes))
+    cidrhost(
+      local.compute_subnet_cidr,
+      count.index + local.num_controller_nodes + local.num_compute_nodes + local.num_gpu_nodes + local.num_nfs_nodes + 4
+    )
   ]
 
   security_groups = [aws_security_group.compute_all_to_all.id]
 
-  tags = {
+  tags = merge(local.common_tags, {
     Name = "filesystem${count.index}"
-  }
+  })
 }
 
 resource "aws_instance" "filesystem" {
   count = local.num_filesystem_nodes
 
   ami               = data.aws_ami.ubuntu.id
-  instance_type     = "t2.small"
+  instance_type     = local.filesystem_instance_type
   availability_zone = var.availability_zone
+  ebs_optimized     = true
 
   key_name = aws_key_pair.deployer.key_name
 
-  primary_network_interface {
+  network_interface {
     network_interface_id = aws_network_interface.filesystem[count.index].id
+    device_index         = 0
   }
 
   root_block_device {
-    volume_type           = "gp2"
-    volume_size           = "10"
+    volume_type           = "gp3"
+    volume_size           = 10
     delete_on_termination = true
   }
 
-  tags = {
-    Name = "filesystem${count.index}"
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
   }
+
+  tags = merge(local.common_tags, {
+    Name = "filesystem${count.index}"
+  })
 }

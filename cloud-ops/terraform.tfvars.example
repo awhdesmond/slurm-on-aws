@@ -1,0 +1,17 @@
+# -------------------------------------------------------
+# Example Terraform Variables
+# -------------------------------------------------------
+# Copy this file to terraform.tfvars and customise values.
+# -------------------------------------------------------
+
+region              = "us-east-1"
+availability_zone   = "us-east-1a"
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+environment         = "dev"
+
+# Database (SLURM accounting)
+db_instance_class       = "db.t3.micro"
+db_allocated_storage    = 20
+db_max_allocated_storage = 100
+db_admin_username       = "slurm_admin"
+db_admin_password       = "CHANGE_ME_BEFORE_APPLY"
