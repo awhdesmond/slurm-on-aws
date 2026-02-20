@@ -2,6 +2,13 @@
 
 IaC repository for provisioning a SLURM cluster on AWS EC2 instances.
 
+- **Infrastructure as Code (IaC):** Architected and deployed a production-grade High Performance Computing (HPC) cluster on AWS using **Terraform** and **Ansible**.
+- **High-Performance Networking:** Integrated AWS Elastic Fabric Adapter (EFA) with NVIDIA **NCCL** (`aws-ofi-nccl`) to bypass the OS kernel, delivering sub-microsecond latency and 400 Gbps bandwidth for multi-node A100 GPU distributed training.
+- **Workload Management & HPC Tuning:** Configured **Slurm** with advanced GPU-aware scheduling (GRES), strict cgroup resource isolation, network topology optimization, and rapid backfill algorithms to maximize cluster throughput.
+- **Parallel Filesystems:** Deployed and tuned high-throughput **GlusterFS** and NFS storage clusters with asynchronous I/O and HPC-specific sysctl optimizations.
+- **Observability & Accounting:** Established a highly-available accounting pipeline using SlurmDBD backed by AWS RDS (MySQL), and integrated native **NVIDIA DCGM** job profiling via Slurm Prolog/Epilog scripts for granular GPU utilization, memory bandwidth, and power draw metrics.
+- **Reliability Engineering:** Developed automated hardware health checks for instantaneous node draining upon detecting PCIe AER faults, XID errors, or EFA link drops to guarantee resilient operational lifetimes for expensive p4d instances.
+
 ## Cluster Architecture
 
 | Node Role   | Count | Instance Type  | Notes                                                 |
