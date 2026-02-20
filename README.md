@@ -116,6 +116,7 @@ mkdir -p /shared_gluster/gpu-sample/
 
 sbatch scripts/sample.slurm
 sbatch scripts/gpu-sample.slurm
+sbatch scripts/gpu-sample-advanced.slurm
 ```
 
 ## TODO
