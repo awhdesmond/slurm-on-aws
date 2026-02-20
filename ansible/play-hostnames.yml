@@ -4,4 +4,4 @@
   gather_facts: false
   tasks:
   - import_role:
-      name: hosts_names
+      name: hostnames

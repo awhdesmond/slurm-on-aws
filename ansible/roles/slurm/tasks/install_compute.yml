@@ -8,6 +8,7 @@
   with_items:
   - slurmd
   - slurm-client
+  - munge
 
 - name: Copy SLURM Configuration
   become: true
@@ -26,6 +27,33 @@
     destination: /etc/slurm-llnl/cgroup.conf
   - src: cgroup_allowed_devices_file.conf.j2
     destination: /etc/slurm-llnl/cgroup_allowed_devices_file.conf
+
+- name: Deploy HealthCheck program
+  become: true
+  template:
+    src: healthcheck.py.j2
+    dest: /etc/slurm-llnl/healthcheck.py
+    owner: slurm
+    group: slurm
+    mode: '0755'
+
+- name: Deploy Prolog script
+  become: true
+  template:
+    src: prolog.sh.j2
+    dest: /etc/slurm-llnl/prolog.sh
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Deploy Epilog script
+  become: true
+  template:
+    src: epilog.sh.j2
+    dest: /etc/slurm-llnl/epilog.sh
+    owner: root
+    group: root
+    mode: '0755'
 
 - name: Copy MUNGE Key from shared directory
   become: true

@@ -1,0 +1,18 @@
+---
+# Default volume definitions — override in playbook or group_vars
+glusterfs_volumes:
+  - name: gv0
+    replicas: 3
+    bricks: "{{ groups.gluster | map('regex_replace', '^(.*)$', '\\1:/export/xvdh1/brick') | list }}"
+    tuning:
+      performance.io-thread-count: "32"
+      performance.read-ahead: "on"
+      performance.write-behind: "on"
+      performance.cache-size: "512MB"
+      performance.io-cache: "on"
+      performance.quick-read: "off"
+      performance.open-behind: "on"
+      performance.stat-prefetch: "on"
+      network.ping-timeout: "30"
+      server.event-threads: "4"
+      client.event-threads: "4"

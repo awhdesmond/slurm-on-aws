@@ -1,36 +1,78 @@
 ---
-- name: Install NFS
+- name: Install NFS server
   become: true
   apt:
     update_cache: yes
     name: nfs-kernel-server
     state: present
 
-- name: Create mount directory
+- name: Create shared directory
   become: true
   file:
     path: /shared
-    mode: '777'
+    mode: '0777'
     state: directory
     owner: nobody
     group: nogroup
 
-- name: Configure exports
+# --- Performance Tuning ---
+
+- name: Increase NFS daemon thread count
+  become: true
+  lineinfile:
+    path: /etc/default/nfs-kernel-server
+    regexp: '^RPCNFSDCOUNT='
+    line: 'RPCNFSDCOUNT=64'
+
+- name: Apply network and memory sysctl tunings
+  become: true
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    reload: true
+    state: present
+  loop:
+    # Socket buffer sizes for NFS throughput
+    - { key: "net.core.rmem_max", value: "16777216" }
+    - { key: "net.core.wmem_max", value: "16777216" }
+    - { key: "net.core.rmem_default", value: "1048576" }
+    - { key: "net.core.wmem_default", value: "1048576" }
+    # TCP buffer auto-tuning range
+    - { key: "net.ipv4.tcp_rmem", value: "4096 1048576 16777216" }
+    - { key: "net.ipv4.tcp_wmem", value: "4096 1048576 16777216" }
+    # TCP optimisations
+    - { key: "net.ipv4.tcp_timestamps", value: "1" }
+    - { key: "net.ipv4.tcp_window_scaling", value: "1" }
+    # VM tuning for write-heavy NFS workloads
+    - { key: "vm.dirty_ratio", value: "40" }
+    - { key: "vm.dirty_background_ratio", value: "10" }
+    - { key: "vm.vfs_cache_pressure", value: "50" }
+
+- name: Set read-ahead for root block device
+  become: true
+  command: blockdev --setra 4096 /dev/xvda
+  changed_when: false
+  failed_when: false
+
+# --- NFS Exports ---
+
+- name: Configure NFS exports (async for HPC scratch)
   become: true
   lineinfile:
     path: /etc/exports
+    regexp: '^/shared'
     state: present
-    line: "{{ item }}"
-  with_items:
-  - "/shared 10.0.0.0/8(rw,sync,no_root_squash,no_subtree_check,insecure)"
+    line: "/shared 10.0.0.0/8(rw,async,no_root_squash,no_subtree_check,insecure)"
 
-- name: Restart NFS Service
+- name: Export shares
   become: true
-  systemd_service:
-    daemon_reload: yes
-    state: restarted
+  command: exportfs -ra
+
+- name: Enable and restart NFS server
+  become: true
+  systemd:
     name: nfs-kernel-server
-
-- name: Export share
-  become: true
-  command: exportfs -a
+    state: restarted
+    enabled: true
+    daemon_reload: true

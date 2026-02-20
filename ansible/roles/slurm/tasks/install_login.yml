@@ -8,6 +8,7 @@
   with_items:
   - slurmd
   - slurm-client
+  - munge
 
 - name: Copy SLURM Configuration
   become: true

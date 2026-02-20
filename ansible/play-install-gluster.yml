@@ -1,7 +1,14 @@
 ---
-- name: Install GlusterFS
+- name: Install GlusterFS servers
   hosts: gluster
   gather_facts: false
   tasks:
   - import_role:
       name: glusterfs
+
+- name: Create and tune GlusterFS volume
+  hosts: gluster
+  gather_facts: false
+  tasks:
+  - import_role:
+      name: glusterfs_volume

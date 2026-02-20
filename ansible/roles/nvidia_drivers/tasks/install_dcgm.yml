@@ -1,0 +1,85 @@
+---
+- name: Add NVIDIA DCGM repository key
+  become: true
+  apt_key:
+    url: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub
+    state: present
+
+- name: Install NVIDIA DCGM
+  become: true
+  apt:
+    update_cache: yes
+    name: datacenter-gpu-manager
+    state: present
+
+- name: Enable and start DCGM service
+  become: true
+  systemd:
+    name: nvidia-dcgm
+    state: started
+    enabled: true
+
+- name: Verify DCGM installation
+  become: true
+  command: dcgmi discovery -l
+  register: dcgm_output
+  changed_when: false
+
+- name: Display DCGM GPU discovery
+  debug:
+    var: dcgm_output.stdout_lines
+
+- name: Install DCGM Exporter
+  become: true
+  apt:
+    update_cache: yes
+    name: datacenter-gpu-manager-exporter
+    state: present
+  register: dcgm_exporter_apt
+  failed_when: false
+
+- name: Download DCGM Exporter binary (fallback)
+  become: true
+  get_url:
+    url: "https://github.com/NVIDIA/dcgm-exporter/releases/latest/download/dcgm-exporter-linux-amd64"
+    dest: /usr/local/bin/dcgm-exporter
+    mode: '0755'
+  when: dcgm_exporter_apt is failed
+
+- name: Create DCGM Exporter systemd service
+  become: true
+  copy:
+    dest: /etc/systemd/system/dcgm-exporter.service
+    content: |
+      [Unit]
+      Description=NVIDIA DCGM Exporter for Prometheus
+      After=nvidia-dcgm.service
+      Requires=nvidia-dcgm.service
+
+      [Service]
+      Type=simple
+      ExecStart=/usr/bin/dcgm-exporter --address :9400
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Enable and start DCGM Exporter
+  become: true
+  systemd:
+    name: dcgm-exporter
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Verify DCGM Exporter is serving metrics
+  become: true
+  uri:
+    url: http://localhost:9400/metrics
+    return_content: false
+    status_code: 200
+  register: exporter_check
+  retries: 3
+  delay: 5
+  changed_when: false

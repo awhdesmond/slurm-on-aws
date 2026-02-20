@@ -1,0 +1,26 @@
+---
+- name: Install kernel headers and build tools
+  become: true
+  apt:
+    update_cache: yes
+    name:
+      - linux-headers-{{ ansible_kernel | default('$(uname -r)') }}
+      - build-essential
+      - dkms
+      - software-properties-common
+    state: present
+
+# Nouveau is the open-source reverse-engineered NVIDIA driver that ships built-in with the Linux kernel. 
+# It must be blacklisted to prevent it from loading and conflicting with the proprietary NVIDIA driver.
+- name: Blacklist nouveau driver
+  become: true
+  copy:
+    dest: /etc/modprobe.d/blacklist-nouveau.conf
+    content: |
+      blacklist nouveau
+      options nouveau modeset=0
+
+- name: Update initramfs
+  become: true
+  command: update-initramfs -u
+  changed_when: false

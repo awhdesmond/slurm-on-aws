@@ -1,0 +1,37 @@
+---
+- name: Add NVIDIA CUDA repository key
+  become: true
+  apt_key:
+    url: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub
+    state: present
+
+- name: Add NVIDIA CUDA repository
+  become: true
+  apt_repository:
+    repo: "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/ /"
+    filename: cuda
+    state: present
+
+- name: Install NVIDIA driver, CUDA toolkit, and Fabric Manager
+  become: true
+  apt:
+    update_cache: yes
+    name:
+      - cuda-drivers
+      - cuda-toolkit
+      - nvidia-fabricmanager
+    state: present
+
+- name: Enable NVIDIA Fabric Manager (required for NVSwitch on p4d)
+  become: true
+  systemd:
+    name: nvidia-fabricmanager
+    state: started
+    enabled: true
+
+- name: Enable NVIDIA persistence daemon
+  become: true
+  systemd:
+    name: nvidia-persistenced
+    state: started
+    enabled: true

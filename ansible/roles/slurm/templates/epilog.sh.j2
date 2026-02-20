@@ -1,0 +1,37 @@
+#!/bin/bash
+# Slurm Epilog
+# Stops DCGM job accounting and outputs the metrics to a log file.
+
+if [ -n "$SLURM_JOB_ID" ]; then
+    if command -v dcgmi >/dev/null 2>&1; then
+        LOG_DIR="/shared/slurm_job_stats"
+        mkdir -p "$LOG_DIR"
+        chmod 755 "$LOG_DIR"
+        
+        LOG_FILE="$LOG_DIR/job_${SLURM_JOB_ID}_$(hostname).log"
+        
+        echo "==========================================================" >> "$LOG_FILE"
+        echo "  DCGM Stats for Slurm Job ID: $SLURM_JOB_ID" >> "$LOG_FILE"
+        echo "  Node: $(hostname)" >> "$LOG_FILE"
+        echo "  Date: $(date)" >> "$LOG_FILE"
+        echo "==========================================================" >> "$LOG_FILE"
+        
+        # Get the group ID created by the Prolog script
+        GROUP_NAME="slurm_job_${SLURM_JOB_ID}"
+        GROUP_ID=$(dcgmi group -l | grep "$GROUP_NAME" | awk '{print $1}')
+        
+        if [ -n "$GROUP_ID" ]; then
+            # Stop tracking and output verbose stats for the specific group
+            dcgmi stats -g "$GROUP_ID" -j "$SLURM_JOB_ID" -x -v >> "$LOG_FILE" 2>&1 || true
+            # Delete the group to avoid resource leaks
+            dcgmi group -d "$GROUP_ID" >/dev/null 2>&1 || true
+        else
+            # Fallback if group wasn't created
+            dcgmi stats -j "$SLURM_JOB_ID" -x -v >> "$LOG_FILE" 2>&1 || true
+        fi
+        
+        # Clean up old logs (older than 30 days) to prevent disk fill up
+        find "$LOG_DIR" -type f -name "job_*.log" -mtime +30 -delete >/dev/null 2>&1 || true
+    fi
+fi
+exit 0

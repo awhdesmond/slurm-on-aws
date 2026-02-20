@@ -1,0 +1,15 @@
+---
+- name: Reboot to load NVIDIA kernel modules
+  become: true
+  reboot:
+    reboot_timeout: 600
+
+- name: Verify NVIDIA driver is loaded
+  become: true
+  command: nvidia-smi
+  register: nvidia_smi_output
+  changed_when: false
+
+- name: Display GPU info
+  debug:
+    var: nvidia_smi_output.stdout_lines

@@ -1,6 +1,6 @@
 output "login_public_ips" {
   description = "Public IPs of the login nodes"
-  value       = aws_network_interface.login[*].association[0].public_ip
+  value       = aws_instance.login[*].public_ip
 }
 
 output "controller_private_ips" {

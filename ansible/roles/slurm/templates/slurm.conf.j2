@@ -8,7 +8,7 @@ SlurmctldHost=controller1
 #
 #DisableRootJobs=NO
 #EnforcePartLimits=NO
-#Epilog=
+Epilog=/etc/slurm-llnl/epilog.sh
 #EpilogSlurmctld=
 #FirstJobId=1
 #MaxJobId=67043328
@@ -30,7 +30,7 @@ SlurmctldHost=controller1
 #PlugStackConfig=
 #PrivateData=jobs
 ProctrackType=proctrack/cgroup
-#Prolog=
+Prolog=/etc/slurm-llnl/prolog.sh
 #PrologFlags=
 #PrologSlurmctld=
 #PropagatePrioProcess=0
@@ -52,7 +52,7 @@ StateSaveLocation=/shared/slurmctld
 #TaskEpilog=
 TaskPlugin=task/affinity,task/cgroup
 #TaskProlog=
-#TopologyPlugin=topology/tree
+TopologyPlugin=topology/tree
 #TmpFS=/tmp
 #TrackWCKey=no
 #TreeWidth=
@@ -61,20 +61,22 @@ TaskPlugin=task/affinity,task/cgroup
 #
 #
 # TIMERS
-#BatchStartTimeout=10
-#CompleteWait=0
-#EpilogMsgTime=2000
-#GetEnvTimeout=2
-#HealthCheckInterval=0
-#HealthCheckProgram=
+BatchStartTimeout=10
+CompleteWait=0
+EpilogMsgTime=2000
+GetEnvTimeout=2
+HealthCheckInterval=300
+HealthCheckNodeState=ANY
+HealthCheckProgram=/etc/slurm-llnl/healthcheck.py
 InactiveLimit=0
 KillWait=30
-#MessageTimeout=10
+MessageTimeout=60
 #ResvOverRun=0
 MinJobAge=300
 #OverTimeLimit=0
 SlurmctldTimeout=120
 SlurmdTimeout=300
+TCPTimeout=5
 #UnkillableStepTimeout=60
 #VSizeFactor=0
 Waittime=0
@@ -83,10 +85,11 @@ Waittime=0
 # SCHEDULING
 #DefMemPerCPU=0
 #MaxMemPerCPU=0
-#SchedulerTimeSlice=30
+SchedulerTimeSlice=30
 SchedulerType=sched/backfill
+SchedulerParameters=bf_continue,bf_interval=30,bf_max_job_user=100,bf_resolution=60,bf_window=10080
 SelectType=select/cons_tres
-SelectTypeParameters=CR_Core_Memory
+SelectTypeParameters=CR_Core_Memory,CR_ONE_TASK_PER_CORE
 #
 #
 # JOB PRIORITY
@@ -105,11 +108,12 @@ SelectTypeParameters=CR_Core_Memory
 #
 #
 # LOGGING AND ACCOUNTING
-#AccountingStorageEnforce=0
-#AccountingStorageHost=
+AccountingStorageEnforce=associations,limits,qos
+AccountingStorageHost=controller0
+AccountingStorageBackupHost=controller1
 #AccountingStoragePass=
-#AccountingStoragePort=
-#AccountingStorageType=
+AccountingStoragePort=6819
+AccountingStorageType=accounting_storage/slurmdbd
 #AccountingStorageUser=
 #AccountingStoreFlags=
 #JobCompHost=
@@ -149,5 +153,5 @@ GresTypes=gpu
 NodeName=compute[0-2] CPUs=1 RealMemory=2000 State=UNKNOWN
 PartitionName=debug Nodes=compute[0-2] Default=YES MaxTime=INFINITE State=UP
 
-NodeName=gpu-compute[0-1] Gres=gpu:1 CPUs=4 RealMemory=16000 State=UNKNOWN
+NodeName=gpu-compute[0-1] Gres=gpu:a100:8 CPUs=96 RealMemory=1100000 State=UNKNOWN
 PartitionName=gpu Nodes=gpu-compute[0-1] MaxTime=INFINITE State=UP

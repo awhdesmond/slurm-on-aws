@@ -1,0 +1,29 @@
+---
+- name: Download AWS EFA installer
+  become: true
+  get_url:
+    url: "https://efa-installer.amazonaws.com/aws-efa-installer-{{ efa_installer_version }}.tar.gz"
+    dest: /tmp/aws-efa-installer-latest.tar.gz
+
+- name: Extract EFA installer
+  become: true
+  unarchive:
+    src: /tmp/aws-efa-installer-latest.tar.gz
+    dest: /tmp
+    remote_src: true
+
+- name: Install AWS EFA with CUDA support
+  become: true
+  shell: cd /tmp/aws-efa-installer && ./efa_installer.sh -y -g
+  args:
+    creates: /opt/amazon/efa/bin/fi_info
+
+- name: Verify EFA installation
+  become: true
+  command: /opt/amazon/efa/bin/fi_info -p efa
+  register: efa_info
+  changed_when: false
+
+- name: Display EFA info
+  debug:
+    var: efa_info.stdout_lines

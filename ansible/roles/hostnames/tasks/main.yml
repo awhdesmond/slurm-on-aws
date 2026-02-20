@@ -1,4 +1,9 @@
 ---
+- name: Set hostname to match inventory name
+  become: true
+  hostname:
+    name: "{{ inventory_hostname }}"
+
 - name: Add IP addresses of all hosts to all other hosts
   become: true
   lineinfile:
@@ -8,7 +13,3 @@
     state: present
   when: hostvars[item].ansible_host is defined
   with_items: "{{ groups.all }}"
-
-# - name: Reboot machine
-#   ansible.builtin.reboot:
-#     reboot_timeout: 3600

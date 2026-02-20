@@ -2,7 +2,10 @@
 - name: Install apt package
   become: true
   apt:
-    name: slurm-wlm
+    name: 
+      - slurm-wlm
+      - slurmdbd
+      - munge
     state: present
     update_cache: yes
 
@@ -24,6 +27,14 @@
   - src: cgroup_allowed_devices_file.conf.j2
     destination: /etc/slurm-llnl/cgroup_allowed_devices_file.conf
 
+- name: Configure SlurmDBD
+  become: true
+  template:
+    src: slurmdbd.conf
+    dest: /etc/slurm-llnl/slurmdbd.conf
+    owner: slurm
+    group: slurm
+    mode: '600'
 
 - name: Copy MUNGE Key from shared directory
   become: true
@@ -43,4 +54,5 @@
     enabled: true
   with_items:
   - munge
+  - slurmdbd
   - slurmctld

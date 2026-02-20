@@ -1,69 +1,110 @@
 ---
-- name: Install software-properties-common
+# --- Install GlusterFS ---
+
+- name: Install dependencies
   become: true
   apt:
     update_cache: yes
-    name: software-properties-common
+    name:
+      - software-properties-common
+      - glusterfs-server
     state: present
 
-- name: Install glusterfs-server
+- name: Enable and start glusterd
   become: true
-  apt:
-    update_cache: yes
-    name: glusterfs-server
-    state: present
-
-- name: Enable systemd services
-  become: true
-  systemd_service:
-    name: "{{ item }}"
-    state: restarted
+  systemd:
+    name: glusterd
+    state: started
     enabled: true
     daemon_reload: true
-  with_items:
-  - glusterd
 
-- name: Partition the disk
+# --- Performance Tuning ---
+
+- name: Apply network sysctl tunings for GlusterFS
+  become: true
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    reload: true
+    state: present
+  loop:
+    # Socket buffer sizes for GlusterFS brick I/O
+    - { key: "net.core.rmem_max", value: "16777216" }
+    - { key: "net.core.wmem_max", value: "16777216" }
+    - { key: "net.core.rmem_default", value: "1048576" }
+    - { key: "net.core.wmem_default", value: "1048576" }
+    # TCP buffer auto-tuning range
+    - { key: "net.ipv4.tcp_rmem", value: "4096 1048576 16777216" }
+    - { key: "net.ipv4.tcp_wmem", value: "4096 1048576 16777216" }
+    # TCP optimisations
+    - { key: "net.ipv4.tcp_timestamps", value: "1" }
+    - { key: "net.ipv4.tcp_window_scaling", value: "1" }
+    # Increase connection backlog for many parallel clients
+    - { key: "net.core.somaxconn", value: "4096" }
+    - { key: "net.core.netdev_max_backlog", value: "5000" }
+    # VM tuning for write-heavy workloads
+    - { key: "vm.dirty_ratio", value: "40" }
+    - { key: "vm.dirty_background_ratio", value: "10" }
+    - { key: "vm.vfs_cache_pressure", value: "50" }
+    - { key: "vm.swappiness", value: "10" }
+
+- name: Set read-ahead for brick block device
+  become: true
+  command: blockdev --setra 4096 /dev/xvdh
+  changed_when: false
+  failed_when: false
+
+- name: Set I/O scheduler to none for EBS volume
+  become: true
+  shell: echo none > /sys/block/xvdh/queue/scheduler
+  changed_when: false
+  failed_when: false
+
+# --- Prepare EBS Volume as Gluster Brick ---
+
+- name: Partition the EBS volume
   become: true
   parted:
     device: /dev/xvdh
     number: 1
-    flags: [ lvm ]
+    flags: [lvm]
     state: present
 
-- name: Format the partition
+- name: Format partition as XFS with optimal inode size
   become: true
   filesystem:
     fstype: xfs
     dev: /dev/xvdh1
+    opts: -i size=512
 
-- name: Create mount directory
-  become: true
+- name: Create brick mount directory
   become: true
   file:
     path: /export/xvdh1
     state: directory
 
-- name: Configure exports
-  become: true
-  lineinfile:
-    path: /etc/fstab
-    state: present
-    line: "{{ item }}"
-  with_items:
-  - "/dev/xvdh1 /export/xvdh1 xfs defaults 0 0"
-
 - name: Mount partition as Gluster brick
   become: true
   mount:
-    fstype: xfs
     src: /dev/xvdh1
     path: /export/xvdh1
+    fstype: xfs
+    opts: noatime,nodiratime,inode64
     state: mounted
 
-- name: Peer probe
+- name: Create brick subdirectory
+  become: true
+  file:
+    path: /export/xvdh1/brick
+    state: directory
+
+# --- Peer Probing ---
+
+- name: Probe gluster peers
   become: true
   command: "gluster peer probe {{ item }}"
   with_items: "{{ groups.gluster }}"
-  when:
-  - inventory_hostname != item
+  when: inventory_hostname != item
+  run_once: true
+  changed_when: false

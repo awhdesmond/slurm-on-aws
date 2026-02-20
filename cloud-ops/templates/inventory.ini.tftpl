@@ -1,0 +1,43 @@
+[all:vars]
+ansible_ssh_user=slurm
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -W %%h:%%p -q ubuntu@${login_ip}"'
+
+[login]
+login0 ansible_host=${login_ip} ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+[nodes:children]
+slurm
+nfs
+gluster
+
+[slurm:children]
+controller
+controller-backup
+compute
+gpu_compute
+
+[controller]
+controller0 ansible_host=${controller_ips[0]}
+
+[controller-backup]
+controller1 ansible_host=${controller_ips[1]}
+
+[compute]
+%{ for i, ip in compute_ips ~}
+compute${i} ansible_host=${ip}
+%{ endfor ~}
+
+[gpu_compute]
+%{ for i, ip in gpu_compute_ips ~}
+gpu-compute${i} ansible_host=${ip}
+%{ endfor ~}
+
+[nfs]
+%{ for i, ip in nfs_ips ~}
+nfs${i} ansible_host=${ip}
+%{ endfor ~}
+
+[gluster]
+%{ for i, ip in filesystem_ips ~}
+gluster${i} ansible_host=${ip}
+%{ endfor ~}

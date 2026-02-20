@@ -1,0 +1,36 @@
+---
+- name: Install NCCL and aws-ofi-nccl plugin
+  become: true
+  apt:
+    update_cache: yes
+    name:
+      - libnccl2
+      - libnccl-dev
+      - nccl-tests
+    state: present
+
+- name: Download aws-ofi-nccl plugin
+  become: true
+  get_url:
+    url: https://github.com/aws/aws-ofi-nccl/releases/latest/download/aws-ofi-nccl-latest.tar.gz
+    dest: /tmp/aws-ofi-nccl-latest.tar.gz
+  failed_when: false
+
+- name: Configure NCCL environment defaults
+  become: true
+  copy:
+    dest: /etc/profile.d/nccl.sh
+    content: |
+      export LD_LIBRARY_PATH=/opt/amazon/efa/lib:$LD_LIBRARY_PATH
+      export FI_PROVIDER=efa
+      export NCCL_NET_GDR_READ=1
+      export NCCL_SOCKET_IFNAME=ens
+      export FI_EFA_USE_DEVICE_RDMA=1
+    mode: '0644'
+
+- name: Deploy NCCL test script
+  become: true
+  copy:
+    src: nccl-test.sh
+    dest: /usr/local/bin/nccl-test
+    mode: '0755'

@@ -1,0 +1,7 @@
+---
+- name: Create and configure GlusterFS volumes
+  include_tasks: create_volume.yml
+  loop: "{{ glusterfs_volumes }}"
+  loop_control:
+    loop_var: volume
+  run_once: true

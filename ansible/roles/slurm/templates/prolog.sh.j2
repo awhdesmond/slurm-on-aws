@@ -1,0 +1,39 @@
+#!/bin/bash
+# Slurm Prolog
+# Starts DCGM job accounting before the job runs.
+
+if [ -n "$SLURM_JOB_ID" ]; then
+    # Only run on nodes that have DCGMI installed (GPU nodes)
+    if command -v dcgmi >/dev/null 2>&1; then
+        
+        # Determine allocated GPUs. Slurm exports CUDA_VISIBLE_DEVICES or SLURM_JOB_GPUS
+        # Note: In Prolog/Epilog, we often have to rely on SLURM_JOB_GPUS depending on the Slurm version.
+        ALLOCATED_GPUS=""
+        if [ -n "$CUDA_VISIBLE_DEVICES" ]; then
+            ALLOCATED_GPUS="$CUDA_VISIBLE_DEVICES"
+        elif [ -n "$SLURM_JOB_GPUS" ]; then
+             ALLOCATED_GPUS="$SLURM_JOB_GPUS"
+        fi
+        
+        # If GPUs are allocated, create a group and start tracking
+        if [ -n "$ALLOCATED_GPUS" ]; then
+            # DCGM group names must be unique. Using the Slurm Job ID.
+            GROUP_NAME="slurm_job_${SLURM_JOB_ID}"
+            
+            # Create a standalone group
+            GROUP_ID=$(dcgmi group -c "$GROUP_NAME" | grep -o 'Group ID: [0-9]*' | awk '{print $3}')
+            
+            if [ -n "$GROUP_ID" ]; then
+                # Add the allocated GPUs (comma separated list) to the group
+                dcgmi group -g "$GROUP_ID" -a "$ALLOCATED_GPUS" >/dev/null 2>&1
+                
+                # Start tracking job stats against this specific group
+                dcgmi stats -g "$GROUP_ID" -j "$SLURM_JOB_ID" -s >/dev/null 2>&1 || true
+            fi
+        else
+            # Fallback: track all GPUs if we can't determine allocation
+            dcgmi stats -j "$SLURM_JOB_ID" -s >/dev/null 2>&1 || true
+        fi
+    fi
+fi
+exit 0

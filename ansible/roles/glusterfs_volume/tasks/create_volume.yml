@@ -1,0 +1,23 @@
+---
+- name: Create GlusterFS volume {{ volume.name }}
+  become: true
+  command: >
+    gluster volume create {{ volume.name }}
+    replica {{ volume.replicas }}
+    {{ volume.bricks | join(' ') }}
+    force
+  register: vol_create
+  failed_when: vol_create.rc != 0 and 'already exists' not in vol_create.stderr
+
+- name: Start GlusterFS volume {{ volume.name }}
+  become: true
+  command: "gluster volume start {{ volume.name }}"
+  register: vol_start
+  failed_when: vol_start.rc != 0 and 'already started' not in vol_start.stderr
+
+- name: Tune GlusterFS volume {{ volume.name }}
+  become: true
+  command: "gluster volume set {{ volume.name }} {{ item.key }} {{ item.value }}"
+  loop: "{{ volume.tuning | dict2items }}"
+  when: volume.tuning is defined
+  changed_when: false

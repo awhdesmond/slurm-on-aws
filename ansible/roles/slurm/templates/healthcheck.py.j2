@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""
+SLURM HealthCheckProgram for AWS GPU Clusters.
+Catches GPU XID errors, EFA/InfiniBand drops, PCIe AER faults, and Filesystem hangs.
+"""
+
+import os
+import sys
+import subprocess
+import re
+import time
+import socket
+
+# --- Configuration ---
+CHECK_FS_DIRS = ["/shared", "/shared_gluster"] # Parallel storage & NFS mounts
+FS_TIMEOUT_SEC = 5                             # Strict timeout before declaring FS dead
+
+def get_dmesg_tail(lines=1000):
+    """Fetches the recent kernel ring buffer to check for hardware faults."""
+    try:
+        result = subprocess.run(['dmesg', '-t'], stdout=subprocess.PIPE, text=True)
+        return result.stdout.split('\n')[-lines:]
+    except Exception:
+        return []
+
+def check_gpus_and_xid(dmesg_lines):
+    """Verifies GPU driver communication and parses kernel logs for XID errors."""
+    # 1. Check basic NVIDIA driver communication
+    try:
+        subprocess.run(['nvidia-smi'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    except subprocess.CalledProcessError:
+        return False, "nvidia-smi failed or hung. Driver lost."
+
+    # 2. Parse dmesg for specific NVRM Xid errors
+    # Critical Xids: 44 (Graphics Engine Fault), 62 (Microcontroller Halt), 79 (Fallen off bus)
+    xid_pattern = re.compile(r"NVRM: Xid \(PCI:.*?\): (\d+),")
+    for line in dmesg_lines:
+        match = xid_pattern.search(line)
+        if match:
+            xid = int(match.group(1))
+            if xid in [44, 62, 79, 119]: 
+                return False, f"Critical GPU XID {xid} detected in kernel logs."
+            
+    return True, "GPUs Healthy"
+
+def check_pcie_aer(dmesg_lines):
+    """Checks for PCIe Advanced Error Reporting (AER) faults."""
+    aer_pattern = re.compile(r"PCIe Bus Error: severity=Uncorrected \(Fatal\)")
+    for line in dmesg_lines:
+        if aer_pattern.search(line):
+            return False, "Fatal PCIe AER bus error detected."
+    return True, "PCIe Healthy"
+
+def check_infiniband_efa():
+    """Reads directly from the Linux sysfs tree to verify EFA/IB link state."""
+    ib_dir = "/sys/class/infiniband"
+    if not os.path.exists(ib_dir):
+        return False, "No InfiniBand/EFA devices found in sysfs."
+
+    devices = os.listdir(ib_dir)
+    if not devices:
+        return False, "InfiniBand/EFA directory empty."
+
+    for dev in devices:
+        port_dir = os.path.join(ib_dir, dev, "ports", "1")
+        state_file = os.path.join(port_dir, "state")
+        phys_state_file = os.path.join(port_dir, "phys_state")
+
+        # Check Logical State
+        if os.path.exists(state_file):
+            with open(state_file, 'r') as f:
+                state = f.read().strip()
+                if "ACTIVE" not in state:
+                    return False, f"EFA device {dev} is not ACTIVE (State: {state})"
+        
+        # Check Physical Link
+        if os.path.exists(phys_state_file):
+            with open(phys_state_file, 'r') as f:
+                phys_state = f.read().strip()
+                if "LinkUp" not in phys_state:
+                    return False, f"EFA device {dev} physical link is DOWN."
+
+    return True, "EFA/IB Links ACTIVE"
+
+def check_filesystem_hangs():
+    """Detects silent POSIX mount drops by enforcing a strict I/O timeout."""
+    for fs in CHECK_FS_DIRS:
+        if not os.path.ismount(fs):
+            return False, f"Filesystem {fs} is not mounted."
+        
+        test_file = os.path.join(fs, f".healthcheck_{socket.gethostname()}")
+        try:
+            # Fork a child process to attempt the write. 
+            # If the FS is hung, the system call will block entirely in 'un-interruptible sleep' (D-state).
+            pid = os.fork()
+            if pid == 0:
+                try:
+                    with open(test_file, 'w') as f:
+                        f.write("OK")
+                    os.remove(test_file)
+                except Exception:
+                    os._exit(1)
+                os._exit(0)
+            else:
+                _, status = os.waitpid(pid, os.WNOHANG)
+                time.sleep(FS_TIMEOUT_SEC)
+                pid_check, status = os.waitpid(pid, os.WNOHANG)
+                
+                # If child hasn't exited after timeout, the FS is hanging
+                if pid_check == 0:
+                    os.kill(pid, 9) 
+                    return False, f"Filesystem {fs} IO hung (exceeded {FS_TIMEOUT_SEC}s timeout)."
+                elif status != 0:
+                    return False, f"Filesystem {fs} IO error."
+
+        except Exception as e:
+            return False, f"Failed FS check on {fs}: {str(e)}"
+
+    return True, "Filesystems Healthy"
+
+def drain_node(reason):
+    """Tells SLURM to DRAIN the node with the specific failure reason."""
+    node_name = socket.gethostname()
+    print(f"FAILED: {reason}")
+    subprocess.run([
+        'scontrol', 'update', 
+        f'NodeName={node_name}', 
+        'State=DRAIN', 
+        f'Reason="{reason}"'
+    ])
+    sys.exit(1) # Return non-zero to immediately alert SLURM
+
+if __name__ == "__main__":
+    # Fetch kernel buffer once to save overhead
+    dmesg_buffer = get_dmesg_tail(1000)
+
+    # 1. PCIe Check
+    ok, msg = check_pcie_aer(dmesg_buffer)
+    if not ok: drain_node(msg)
+
+    # 2. GPU Check
+    ok, msg = check_gpus_and_xid(dmesg_buffer)
+    if not ok: drain_node(msg)
+
+    # 3. Network Check (AWS EFA / IB)
+    ok, msg = check_infiniband_efa()
+    if not ok: drain_node(msg)
+
+    # 4. Storage Check
+    ok, msg = check_filesystem_hangs()
+    if not ok: drain_node(msg)
+
+    print("HEALTHY: All hardware and OS checks passed.")
+    sys.exit(0)
+    
